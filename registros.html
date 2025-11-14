@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Validación de Producción Local</title>
-    <!-- Carga de Tailwind CSS para estilos modernos y responsive -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Definición de colores personalizados para Tailwind (basados en los colores del logo) */
@@ -20,7 +19,7 @@
         .text-primary { color: var(--color-primary); }
         .focus\:ring-primary:focus { --tw-ring-color: var(--color-primary); }
         .focus\:border-primary:focus { border-color: var(--color-primary); }
-        .border-success { border-color: var(--color-success); }
+        .border-success { border-color: var-color-success; }
 
 
         /* Estilos personalizados para el SignaturePad */
@@ -47,23 +46,17 @@
             break-after: page;
         }
     </style>
-    <!-- Librería para el pad de firma (SignaturePad) -->
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
-    <!-- Librerías para la exportación a PDF (jsPDF y html2canvas) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 
 <body class="bg-gray-100 min-h-screen font-sans" onload="startApp()"> 
 
-    <!-- Contenedor Principal -->
     <div id="app" class="max-w-md mx-auto bg-white shadow-xl min-h-screen flex flex-col">
 
-        <!-- Header -->
         <header class="bg-primary text-white p-4 flex justify-between items-center rounded-b-lg">
             <div class="flex items-center space-x-3">
-                <!-- LOGO DE LA EMPRESA: Se ajusta w-auto para ancho proporcional y h-10 para limitar la altura -->
-                <!-- La imagen se adaptará a la altura máxima de 2.5rem (h-10) y su ancho será automático (w-auto) -->
                 <img src="https://agrozzi.cl/wp-content/uploads/2023/06/footer-19-06-1.png" alt="Logo de la Empresa" class="h-10 w-auto">
                 <h1 class="text-xl font-bold">Registro de Producción</h1>
             </div>
@@ -73,21 +66,25 @@
             </button>
         </header>
 
-        <!-- ID de Usuario (MANDATORIO para apps multi-usuario) -->
         <div id="user-id-display" class="text-xs text-gray-500 p-2 bg-gray-50">
             ID de Usuario Local: Anonimo (Almacenamiento Local)
         </div>
 
-        <!-- Vistas de la Aplicación -->
         <div id="views" class="p-4 flex-grow space-y-4">
 
-            <!-- 1. Vista de Nuevo Registro (Supervisor) -->
             <div id="newRecordView">
                 <h2 class="text-2xl font-semibold text-primary mb-4">Nuevo Registro (Supervisor)</h2>
                 <div class="space-y-4">
                     <input type="text" id="material" placeholder="Nombre del Material" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2" required>
                     <input type="number" id="cantidad" placeholder="Cantidad Producida" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2" required>
+                    
+                    <label class="block text-gray-700 font-medium mb-1 pt-2 border-t border-gray-200">Foto de Evidencia (Opcional):</label>
+                    <input type="file" id="fotoEvidencia" accept="image/*" capture="environment" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2" onchange="previewImage(event)">
 
+                    <div id="image-preview-container" class="mt-2 hidden">
+                        <p class="text-sm text-gray-500 mb-1">Vista Previa:</p>
+                        <img id="image-preview" class="max-w-full h-auto rounded-lg shadow-md border border-gray-300" style="max-height: 200px; object-fit: cover;">
+                    </div>
                     <label class="block text-gray-700 font-medium mb-1">Firma del Supervisor:</label>
                     <canvas id="signaturePadSupervisor" class="signature-pad bg-white"></canvas>
                     <button onclick="clearSignature('supervisor')" class="text-sm text-red-500 hover:text-red-700 mt-1">Borrar Firma</button>
@@ -99,16 +96,13 @@
                 </div>
             </div>
 
-            <!-- 2. Vista de Reporte de Registros -->
             <div id="reportView" class="hidden">
                 <h2 class="text-2xl font-semibold text-primary mb-4">Reporte de Producción</h2>
 
-                <!-- Filtro por Material -->
                 <div class="mb-4">
                     <input type="text" id="materialFilter" onkeyup="loadRecords()" placeholder="Filtrar por Material..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2">
                 </div>
                 
-                <!-- Botones de Descarga -->
                 <div class="space-y-2 mb-4">
                     <button onclick="exportToExcel()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-200">
                         Descargar Excel (CSV)
@@ -120,7 +114,6 @@
 
 
                 <div id="recordList" class="space-y-3">
-                    <!-- Los registros se insertarán aquí -->
                     <p id="noRecords" class="text-gray-500 text-center py-8">No hay registros aún.</p>
                 </div>
 
@@ -132,14 +125,12 @@
         </div>
     </div>
 
-    <!-- MODAL de Validación (Firma del Validador) -->
     <div id="validationModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl">
             <h3 class="text-xl font-bold text-gray-800 mb-4">Validación de Producción</h3>
 
             <div id="modalRecordDetails" class="mb-4 text-sm text-gray-600 border-b pb-2">
-                <!-- Detalles del registro seleccionado -->
-            </div>
+                </div>
 
             <input type="text" id="validatorName" placeholder="Tu Nombre (Validador)" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-success focus:border-success focus:ring-2 mb-4" required>
 
@@ -158,7 +149,6 @@
         </div>
     </div>
 
-    <!-- MODAL de Edición de Registro -->
     <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl">
             <h3 class="text-xl font-bold text-gray-800 mb-4">Editar Registro</h3>
@@ -182,7 +172,6 @@
         </div>
     </div>
 
-    <!-- Contenido Oculto para Generación de PDF -->
     <div id="pdfContent"></div>
 
     <script type="module">
@@ -194,6 +183,7 @@
         let signaturePadSupervisor, signaturePadValidator;
         let selectedRecordId = null;
         let lastDeletedRecord = null; // Para la función de Deshacer eliminación
+        let currentImageBase64 = null; // Variable para almacenar la imagen en Base64
 
         // Clave de almacenamiento local
         const LOCAL_STORAGE_KEY = 'productionRecords';
@@ -235,6 +225,47 @@
             // 3. Mostrar la vista inicial
             changeView('newRecord');
         };
+
+        // --- MANEJO DE IMÁGENES (NUEVAS FUNCIONES) ---
+
+        /**
+         * Muestra una vista previa de la imagen seleccionada y la prepara para Base64.
+         */
+        window.previewImage = (event) => {
+            const file = event.target.files[0];
+            const previewEl = document.getElementById('image-preview');
+            const previewContainer = document.getElementById('image-preview-container');
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewEl.src = e.target.result;
+                    previewContainer.classList.remove('hidden');
+                    // Almacenar la Base64 globalmente para `saveRecord`
+                    currentImageBase64 = e.target.result; 
+                };
+                reader.readAsDataURL(file);
+            } else {
+                previewEl.src = '';
+                previewContainer.classList.add('hidden');
+                currentImageBase64 = null;
+            }
+        };
+
+        /**
+         * Convierte un objeto File a Base64 usando una promesa.
+         * (Se mantiene para la función 'saveRecord' original, aunque ahora se usa 'currentImageBase64')
+         */
+        const imageToBase64 = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        };
+
+        // --- GESTIÓN DE REGISTROS ---
 
         /**
          * Obtiene todos los registros desde localStorage.
@@ -290,6 +321,11 @@
             if (viewName === 'newRecord') {
                 document.getElementById('newRecordView').classList.remove('hidden');
                 signaturePadSupervisor.clear();
+                // Limpiar imagen al volver al formulario
+                document.getElementById('fotoEvidencia').value = ''; 
+                document.getElementById('image-preview').src = '';
+                document.getElementById('image-preview-container').classList.add('hidden');
+                currentImageBase64 = null;
             } else if (viewName === 'report') {
                 document.getElementById('reportView').classList.remove('hidden');
                 loadRecords(); // Recargar datos al ir al reporte
@@ -381,7 +417,7 @@
         /**
          * Guarda un nuevo registro de producción en localStorage.
          */
-        window.saveRecord = () => {
+        window.saveRecord = async () => { // Se convierte a async para usar await en la Base64, aunque ahora usa la variable global
             const material = document.getElementById('material').value.trim();
             const cantidad = parseInt(document.getElementById('cantidad').value, 10);
             const messageEl = document.getElementById('newRecordMessage');
@@ -396,7 +432,9 @@
                 messageEl.textContent = 'El supervisor debe firmar para guardar el registro.';
                 return;
             }
-
+            
+            // La Base64 de la foto ya debe estar en currentImageBase64 si se cargó una
+            const fotoEvidencia = currentImageBase64; 
             const supervisorSignature = signaturePadSupervisor.toDataURL();
             
             try {
@@ -407,6 +445,7 @@
                     id: newRecordId,
                     material: material,
                     cantidad: cantidad,
+                    fotoEvidencia: fotoEvidencia, // NUEVO: Campo para la foto
                     supervisorSignature: supervisorSignature,
                     supervisorId: currentUserId,
                     timestamp: new Date().toISOString(),
@@ -423,6 +462,14 @@
                 document.getElementById('material').value = '';
                 document.getElementById('cantidad').value = '';
                 signaturePadSupervisor.clear();
+                
+                // Limpiar la imagen después de guardar (importante)
+                document.getElementById('fotoEvidencia').value = ''; 
+                document.getElementById('image-preview').src = '';
+                document.getElementById('image-preview-container').classList.add('hidden');
+                currentImageBase64 = null;
+
+
                 messageEl.textContent = '¡Registro guardado exitosamente! Pasando al reporte...';
                 messageEl.classList.remove('text-red-500');
                 messageEl.classList.add('text-success'); // Usando el color verde
@@ -716,12 +763,20 @@
             const validationDate = record.validationTimestamp ? new Date(record.validationTimestamp).toLocaleString('es-CL') : 'Pendiente';
             const editedDate = record.lastEdited ? `(Editado: ${new Date(record.lastEdited).toLocaleString('es-CL')})` : '';
 
+            // Bloque HTML de la foto (si existe)
+            const photoBlock = record.fotoEvidencia ? `
+                <div class="border p-3 rounded-lg mb-6 bg-gray-50/50" style="max-height: 300px;">
+                    <h2 class="text-lg font-bold mb-2 text-gray-800">Foto de Evidencia</h2>
+                    <img src="${record.fotoEvidencia}" alt="Foto de Evidencia" style="max-width: 100%; height: auto; border: 1px solid #ccc; margin-top: 5px; max-height: 250px; object-fit: contain;">
+                </div>
+            ` : '';
+            // Fin Bloque HTML de la foto
+
             // Usamos una estructura simple que cabe en A4
             return `
                 <div class="p-4 border-4 border-primary">
                     ${includeHeader ? `
                         <div class="flex items-center space-x-3 mb-6 border-b pb-2">
-                            <!-- LOGO PARA PDF: w-full asegura que use el ancho disponible dentro del contenedor del PDF, max-h-12 limita la altura máxima -->
                             <img src="https://agrozzi.cl/wp-content/uploads/2023/06/footer-19-06-1.png" alt="Logo de la Empresa" class="w-full max-w-full max-h-12 object-contain" style="height: auto;">
                         </div>
                     ` : ''}
@@ -735,14 +790,12 @@
                         </ul>
                     </div>
 
-                    <!-- Bloque de Supervisor -->
-                    <div class="border p-3 rounded-lg mb-6 bg-gray-50" style="max-height: 250px;">
+                    ${photoBlock} <div class="border p-3 rounded-lg mb-6 bg-gray-50" style="max-height: 250px;">
                         <h2 class="text-lg font-bold mb-2 text-primary">Firma del Supervisor</h2>
                         <p class="text-sm"><strong>Registrado por:</strong> ${record.supervisorId}</p>
                         <img src="${record.supervisorSignature}" alt="Firma del Supervisor" style="max-width: 100%; height: auto; border: 1px solid #ccc; margin-top: 5px;">
                     </div>
 
-                    <!-- Bloque de Validador -->
                     <div class="border p-3 rounded-lg ${record.isSigned ? 'bg-success/10' : 'bg-red-50'}" style="max-height: 250px;">
                         <h2 class="text-lg font-bold mb-2 ${record.isSigned ? 'text-success' : 'text-red-600'}">Validación</h2>
                         ${record.isSigned ? `
@@ -836,7 +889,6 @@
             const indexHtml = `
                 <div class="text-center p-4 mb-8">
                     <div class="flex items-center justify-center space-x-3 mb-4">
-                        <!-- LOGO PARA PDF: w-full asegura que use el ancho disponible dentro del contenedor del PDF, max-h-12 limita la altura máxima -->
                         <img src="https://agrozzi.cl/wp-content/uploads/2023/06/footer-19-06-1.png" alt="Logo de la Empresa" class="w-full max-w-full max-h-12 object-contain" style="height: auto;">
                     </div>
                     <p class="text-md text-gray-600">Total de Registros: ${allRecords.length}</p>
