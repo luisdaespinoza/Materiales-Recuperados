@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validación de Producción Local</title>
+    <!-- Carga de Tailwind CSS para estilos modernos y responsive -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Definición de colores personalizados para Tailwind (basados en los colores del logo) */
+        :root {
+            --color-primary: #8a0007; /* Rojo del logo */
+            --color-success: #40a735; /* Verde del logo */
+        }
+        .bg-primary { background-color: var(--color-primary); }
+        .hover\:bg-primary-dark:hover { background-color: #c90c15; } /* Rojo un poco más oscuro */
+        .bg-success { background-color: var(--color-success); }
+        .hover\:bg-success-dark:hover { background-color: #358d2b; } /* Verde un poco más oscuro */
+        .border-primary { border-color: var(--color-primary); }
+        .text-primary { color: var(--color-primary); }
+        .focus\:ring-primary:focus { --tw-ring-color: var(--color-primary); }
+        .focus\:border-primary:focus { border-color: var(--color-primary); }
+        .border-success { border-color: var(--color-success); }
+
+
+        /* Estilos personalizados para el SignaturePad */
+        .signature-pad {
+            border: 2px solid var(--color-primary); /* Borde con color primario */
+            border-radius: 8px;
+            width: 100%;
+            height: 150px;
+            touch-action: none; /* Mejor manejo táctil */
+        }
+        /* Ocultar el contenido del PDF que se usará para la exportación */
+        #pdfContent {
+            position: absolute;
+            left: -9999px;
+            width: 595.28px; /* Ancho fijo para el PDF (A4 en px a 72dpi: 595.28) */
+            padding: 40px; /* Aumentamos el padding para simular márgenes del PDF */
+            box-sizing: border-box;
+            background-color: white;
+            color: black;
+            font-family: 'Inter', sans-serif;
+        }
+        .page-break {
+            page-break-after: always;
+            break-after: page;
+        }
+    </style>
+    <!-- Librería para el pad de firma (SignaturePad) -->
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <!-- Librerías para la exportación a PDF (jsPDF y html2canvas) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen font-sans" onload="startApp()"> 
+
+    <!-- Contenedor Principal -->
+    <div id="app" class="max-w-md mx-auto bg-white shadow-xl min-h-screen flex flex-col">
+
+        <!-- Header -->
+        <header class="bg-primary text-white p-4 flex justify-between items-center rounded-b-lg">
+            <div class="flex items-center space-x-3">
+                <!-- LOGO DE LA EMPRESA: Se ajusta w-auto para ancho proporcional y h-10 para limitar la altura -->
+                <!-- La imagen se adaptará a la altura máxima de 2.5rem (h-10) y su ancho será automático (w-auto) -->
+                <img src="https://agrozzi.cl/wp-content/uploads/2023/06/footer-19-06-1.png" alt="Logo de la Empresa" class="h-10 w-auto">
+                <h1 class="text-xl font-bold">Registro de Producción</h1>
+            </div>
+            
+            <button onclick="changeView('report')" class="bg-primary-dark hover:bg-white hover:text-primary text-sm py-1 px-3 rounded-full transition duration-150 border-2 border-transparent hover:border-white">
+                Ver Reporte
+            </button>
+        </header>
+
+        <!-- ID de Usuario (MANDATORIO para apps multi-usuario) -->
+        <div id="user-id-display" class="text-xs text-gray-500 p-2 bg-gray-50">
+            ID de Usuario Local: Anonimo (Almacenamiento Local)
+        </div>
+
+        <!-- Vistas de la Aplicación -->
+        <div id="views" class="p-4 flex-grow space-y-4">
+
+            <!-- 1. Vista de Nuevo Registro (Supervisor) -->
+            <div id="newRecordView">
+                <h2 class="text-2xl font-semibold text-primary mb-4">Nuevo Registro (Supervisor)</h2>
+                <div class="space-y-4">
+                    <input type="text" id="material" placeholder="Nombre del Material" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2" required>
+                    <input type="number" id="cantidad" placeholder="Cantidad Producida" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2" required>
+
+                    <label class="block text-gray-700 font-medium mb-1">Firma del Supervisor:</label>
+                    <canvas id="signaturePadSupervisor" class="signature-pad bg-white"></canvas>
+                    <button onclick="clearSignature('supervisor')" class="text-sm text-red-500 hover:text-red-700 mt-1">Borrar Firma</button>
+
+                    <button onclick="saveRecord()" class="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3 rounded-lg shadow-md transition duration-200">
+                        Guardar Registro
+                    </button>
+                    <p id="newRecordMessage" class="text-sm text-red-500 mt-2"></p>
+                </div>
+            </div>
+
+            <!-- 2. Vista de Reporte de Registros -->
+            <div id="reportView" class="hidden">
+                <h2 class="text-2xl font-semibold text-primary mb-4">Reporte de Producción</h2>
+
+                <!-- Filtro por Material -->
+                <div class="mb-4">
+                    <input type="text" id="materialFilter" onkeyup="loadRecords()" placeholder="Filtrar por Material..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2">
+                </div>
+                
+                <!-- Botones de Descarga -->
+                <div class="space-y-2 mb-4">
+                    <button onclick="exportToExcel()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-200">
+                        Descargar Excel (CSV)
+                    </button>
+                    <button onclick="exportAllPDF()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg shadow-md transition duration-200">
+                        Descargar TODOS los Registros (PDF)
+                    </button>
+                </div>
+
+
+                <div id="recordList" class="space-y-3">
+                    <!-- Los registros se insertarán aquí -->
+                    <p id="noRecords" class="text-gray-500 text-center py-8">No hay registros aún.</p>
+                </div>
+
+                <button onclick="changeView('newRecord')" class="w-full mt-6 bg-primary hover:bg-primary-dark text-white font-bold py-3 rounded-lg shadow-md transition duration-200">
+                    Volver al Formulario
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL de Validación (Firma del Validador) -->
+    <div id="validationModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Validación de Producción</h3>
+
+            <div id="modalRecordDetails" class="mb-4 text-sm text-gray-600 border-b pb-2">
+                <!-- Detalles del registro seleccionado -->
+            </div>
+
+            <input type="text" id="validatorName" placeholder="Tu Nombre (Validador)" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-success focus:border-success focus:ring-2 mb-4" required>
+
+            <label class="block text-gray-700 font-medium mb-1">Firma del Validador:</label>
+            <canvas id="signaturePadValidator" class="signature-pad bg-white border-success"></canvas>
+            <button onclick="clearSignature('validator')" class="text-sm text-red-500 hover:text-red-700 mt-1">Borrar Firma</button>
+
+            <div class="flex space-x-3 mt-6">
+                <button onclick="closeModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 rounded-lg transition duration-200">
+                    Cancelar
+                </button>
+                <button id="validateBtn" onclick="submitValidation()" class="flex-1 bg-success hover:bg-success-dark text-white font-bold py-2 rounded-lg shadow-md transition duration-200">
+                    Firmar y Validar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL de Edición de Registro -->
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Editar Registro</h3>
+
+            <input type="hidden" id="editRecordId">
+            
+            <label class="block text-gray-700 font-medium mb-1">Material:</label>
+            <input type="text" id="editMaterial" placeholder="Nombre del Material" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2 mb-4" required>
+            
+            <label class="block text-gray-700 font-medium mb-1">Cantidad:</label>
+            <input type="number" id="editCantidad" placeholder="Cantidad Producida" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2 mb-4" required>
+
+            <div class="flex space-x-3 mt-6">
+                <button onclick="closeEditModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 rounded-lg transition duration-200">
+                    Cancelar
+                </button>
+                <button id="saveEditBtn" onclick="submitEdit()" class="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-lg shadow-md transition duration-200">
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenido Oculto para Generación de PDF -->
+    <div id="pdfContent"></div>
+
+    <script type="module">
+        // Importaciones de módulos
+        const { jsPDF } = window.jspdf;
+
+        // --- Variables de Estado y Canvas ---
+        let currentView = 'newRecord';
+        let signaturePadSupervisor, signaturePadValidator;
+        let selectedRecordId = null;
+        let lastDeletedRecord = null; // Para la función de Deshacer eliminación
+
+        // Clave de almacenamiento local
+        const LOCAL_STORAGE_KEY = 'productionRecords';
+        // Simulación de User ID (ya que no hay Firebase Auth)
+        const currentUserId = 'SupervisorLocal'; 
+
+        /**
+         * Función principal que se llama al cargar la página.
+         */
+        window.startApp = () => {
+            // 1. Inicializar Signature Pads
+            const canvasSup = document.getElementById('signaturePadSupervisor');
+            const canvasVal = document.getElementById('signaturePadValidator');
+            signaturePadSupervisor = new SignaturePad(canvasSup);
+            signaturePadValidator = new SignaturePad(canvasVal);
+
+            // Ajustar tamaño del canvas en el inicio y al redimensionar (necesario para SignaturePad)
+            const resizeCanvas = (pad) => {
+                const canvas = pad.canvas;
+                const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                canvas.width = canvas.offsetWidth * ratio;
+                canvas.height = canvas.offsetHeight * ratio;
+                canvas.getContext('2d').scale(ratio, ratio);
+                pad.clear(); // Limpiar firma al redimensionar
+            };
+            resizeCanvas(signaturePadSupervisor);
+            resizeCanvas(signaturePadValidator);
+
+            window.addEventListener('resize', () => {
+                resizeCanvas(signaturePadSupervisor);
+                if (document.getElementById('validationModal').classList.contains('flex')) {
+                    resizeCanvas(signaturePadValidator);
+                }
+            });
+
+            // 2. Cargar registros
+            loadRecords();
+
+            // 3. Mostrar la vista inicial
+            changeView('newRecord');
+        };
+
+        /**
+         * Obtiene todos los registros desde localStorage.
+         * @returns {Array<Object>} Lista de registros.
+         */
+        const getAllRecords = () => {
+            const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+            // Asegurar que los registros estén ordenados por timestamp descendente
+            const records = data ? JSON.parse(data) : [];
+            return records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        };
+
+        /**
+         * Guarda la lista completa de registros en localStorage.
+         * @param {Array<Object>} records - Lista de registros a guardar.
+         */
+        const saveAllRecords = (records) => {
+            // No ordenar aquí, ya se hace al obtenerlos si es necesario para el UI
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(records));
+        };
+
+        /**
+         * Simula la búsqueda de un registro por ID.
+         * @param {string} id - ID del registro.
+         * @returns {Object|null} El registro encontrado o null.
+         */
+        const getRecordById = (id) => {
+            const records = getAllRecords();
+            return records.find(r => r.id === id) || null;
+        };
+
+        /**
+         * Cambia la vista principal de la aplicación.
+         */
+        window.changeView = (viewName) => {
+            currentView = viewName;
+            document.getElementById('newRecordView').classList.add('hidden');
+            document.getElementById('reportView').classList.add('hidden');
+            
+            const reportBtn = document.querySelector(`[onclick="changeView('report')"]`);
+            const newRecordBtn = document.querySelector(`[onclick="changeView('newRecord')"]`);
+            
+            // Si el botón de "Volver al Formulario" existe
+            if (newRecordBtn) {
+                newRecordBtn.textContent = 'Volver al Formulario';
+            }
+
+            if (reportBtn) {
+                reportBtn.textContent = 'Ver Reporte';
+            }
+
+
+            if (viewName === 'newRecord') {
+                document.getElementById('newRecordView').classList.remove('hidden');
+                signaturePadSupervisor.clear();
+            } else if (viewName === 'report') {
+                document.getElementById('reportView').classList.remove('hidden');
+                loadRecords(); // Recargar datos al ir al reporte
+                if (reportBtn) {
+                    reportBtn.textContent = 'Ver Reporte (Actual)';
+                }
+            }
+        };
+
+        /**
+         * Limpia el canvas de firma especificado.
+         */
+        window.clearSignature = (type) => {
+            if (type === 'supervisor') {
+                signaturePadSupervisor.clear();
+            } else if (type === 'validator') {
+                signaturePadValidator.clear();
+            }
+        };
+
+        // --- GESTIÓN DE MODALES ---
+
+        /**
+         * Cierra el modal de validación.
+         */
+        window.closeModal = () => {
+            document.getElementById('validationModal').classList.replace('flex', 'hidden');
+            selectedRecordId = null;
+        };
+        
+        /**
+         * Abre el modal de validación para un registro específico.
+         */
+        window.openModal = (recordId) => {
+            selectedRecordId = recordId;
+            const recordData = getRecordById(recordId);
+
+            if (!recordData) {
+                alertMessage('Error: Registro no encontrado localmente.', 'bg-red-500');
+                return;
+            }
+
+            signaturePadValidator.clear(); 
+            document.getElementById('validatorName').value = '';
+            document.getElementById('validationModal').classList.replace('hidden', 'flex');
+
+            // Mostrar detalles del registro en el modal
+            document.getElementById('modalRecordDetails').innerHTML = `
+                <p><strong>Material:</strong> ${recordData.material}</p>
+                <p><strong>Cantidad:</strong> ${recordData.cantidad}</p>
+                <p><strong>Registrado por:</strong> ${recordData.supervisorId}</p>
+            `;
+
+            // Asegurar que el canvas del modal se redimensione correctamente al abrir
+            const canvasVal = document.getElementById('signaturePadValidator');
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            canvasVal.width = canvasVal.offsetWidth * ratio;
+            canvasVal.height = canvasVal.offsetHeight * ratio;
+            canvasVal.getContext('2d').scale(ratio, ratio);
+            signaturePadValidator.clear();
+        };
+
+        /**
+         * Abre el modal de edición para un registro específico.
+         */
+        window.openEditModal = (recordId) => {
+            const record = getRecordById(recordId);
+            if (!record) {
+                alertMessage('Error: Registro no encontrado para editar.', 'bg-red-500');
+                return;
+            }
+
+            document.getElementById('editRecordId').value = record.id;
+            document.getElementById('editMaterial').value = record.material;
+            document.getElementById('editCantidad').value = record.cantidad;
+
+            document.getElementById('editModal').classList.replace('hidden', 'flex');
+        };
+
+        /**
+         * Cierra el modal de edición.
+         */
+        window.closeEditModal = () => {
+            document.getElementById('editModal').classList.replace('flex', 'hidden');
+        };
+
+        // --- OPERACIONES CRUD ---
+        
+        /**
+         * Guarda un nuevo registro de producción en localStorage.
+         */
+        window.saveRecord = () => {
+            const material = document.getElementById('material').value.trim();
+            const cantidad = parseInt(document.getElementById('cantidad').value, 10);
+            const messageEl = document.getElementById('newRecordMessage');
+            messageEl.textContent = '';
+
+            if (!material || isNaN(cantidad) || cantidad <= 0) {
+                messageEl.textContent = 'Por favor, ingrese material y una cantidad válida.';
+                return;
+            }
+
+            if (signaturePadSupervisor.isEmpty()) {
+                messageEl.textContent = 'El supervisor debe firmar para guardar el registro.';
+                return;
+            }
+
+            const supervisorSignature = signaturePadSupervisor.toDataURL();
+            
+            try {
+                const records = getAllRecords();
+                const newRecordId = 'rec-' + Date.now(); 
+
+                const newRecord = {
+                    id: newRecordId,
+                    material: material,
+                    cantidad: cantidad,
+                    supervisorSignature: supervisorSignature,
+                    supervisorId: currentUserId,
+                    timestamp: new Date().toISOString(),
+                    isSigned: false, 
+                    validatorName: null,
+                    validatorSignature: null,
+                    validationTimestamp: null
+                };
+                
+                // Usar unshift para que el nuevo aparezca primero en el array
+                records.unshift(newRecord); 
+                saveAllRecords(records);
+
+                document.getElementById('material').value = '';
+                document.getElementById('cantidad').value = '';
+                signaturePadSupervisor.clear();
+                messageEl.textContent = '¡Registro guardado exitosamente! Pasando al reporte...';
+                messageEl.classList.remove('text-red-500');
+                messageEl.classList.add('text-success'); // Usando el color verde
+                messageEl.style.color = 'var(--color-success)'; // Aplicar el color css variable
+
+                setTimeout(() => {
+                    changeView('report');
+                    messageEl.textContent = '';
+                }, 1500);
+
+            } catch (e) {
+                console.error("Error al guardar el registro en localStorage:", e);
+                messageEl.textContent = 'Error al guardar localmente.';
+                messageEl.classList.remove('text-success');
+                messageEl.classList.add('text-red-500');
+                messageEl.style.color = ''; // Eliminar estilo si hay error
+            }
+        };
+
+        /**
+         * Procesa la firma y validación del validador.
+         */
+        window.submitValidation = () => {
+            if (!selectedRecordId) return;
+
+            const validatorName = document.getElementById('validatorName').value.trim();
+            if (!validatorName) {
+                alertMessage('Por favor, ingrese el nombre del validador.', 'bg-red-500');
+                return;
+            }
+
+            if (signaturePadValidator.isEmpty()) {
+                alertMessage('El validador debe firmar para validar el registro.', 'bg-red-500');
+                return;
+            }
+
+            const validatorSignature = signaturePadValidator.toDataURL();
+
+            try {
+                let records = getAllRecords();
+                const recordIndex = records.findIndex(r => r.id === selectedRecordId);
+
+                if (recordIndex !== -1) {
+                    records[recordIndex].validatorName = validatorName;
+                    records[recordIndex].validatorSignature = validatorSignature;
+                    records[recordIndex].validationTimestamp = new Date().toISOString();
+                    records[recordIndex].isSigned = true;
+
+                    saveAllRecords(records);
+
+                    closeModal();
+                    alertMessage('¡Registro validado y firmado!', 'bg-success'); // Usando el color verde
+                    loadRecords(); 
+                } else {
+                    alertMessage('Error: Registro no encontrado para validar.', 'bg-red-500');
+                }
+
+            } catch (e) {
+                console.error("Error al validar el registro:", e);
+                alertMessage('Error al validar. Consulte la consola.', 'bg-red-500');
+            }
+        };
+
+        /**
+         * Guarda los cambios de edición.
+         */
+        window.submitEdit = () => {
+            const id = document.getElementById('editRecordId').value;
+            const material = document.getElementById('editMaterial').value.trim();
+            const cantidad = parseInt(document.getElementById('editCantidad').value, 10);
+
+            if (!material || isNaN(cantidad) || cantidad <= 0) {
+                alertMessage('Por favor, ingrese material y cantidad válidos.', 'bg-red-500');
+                return;
+            }
+
+            try {
+                let records = getAllRecords();
+                const recordIndex = records.findIndex(r => r.id === id);
+
+                if (recordIndex !== -1) {
+                    // Actualizar solo los campos editables
+                    records[recordIndex].material = material;
+                    records[recordIndex].cantidad = cantidad;
+                    records[recordIndex].lastEdited = new Date().toISOString(); 
+
+                    saveAllRecords(records);
+                    closeEditModal();
+                    alertMessage('Cambios guardados exitosamente.', 'bg-primary'); // Usando el color rojo
+                    loadRecords(); 
+                } else {
+                    alertMessage('Error: Registro no encontrado para actualizar.', 'bg-red-500');
+                }
+            } catch (e) {
+                console.error("Error al editar el registro:", e);
+                alertMessage('Error al guardar la edición. Consulte la consola.', 'bg-red-500');
+            }
+        };
+
+        /**
+         * Elimina un registro con opción de Deshacer (Undo).
+         */
+        window.deleteRecord = (recordId) => {
+            let records = getAllRecords();
+            const recordIndex = records.findIndex(r => r.id === recordId);
+
+            if (recordIndex !== -1) {
+                // 1. Guardar el registro eliminado para el undo
+                lastDeletedRecord = records.splice(recordIndex, 1)[0]; 
+                saveAllRecords(records);
+                loadRecords();
+
+                // 2. Mostrar mensaje de deshacer
+                const message = `Registro de <strong>${lastDeletedRecord.material}</strong> eliminado. <span onclick="undoDelete()" class="font-bold underline cursor-pointer hover:text-white/80">Deshacer</span>`;
+                alertMessage(message, 'bg-primary', true); // Usando el color rojo para la eliminación
+            }
+        };
+
+        /**
+         * Deshace la última eliminación.
+         */
+        window.undoDelete = () => {
+            if (lastDeletedRecord) {
+                let records = getAllRecords();
+                records.unshift(lastDeletedRecord); // Agregarlo de nuevo
+                saveAllRecords(records);
+                loadRecords();
+                alertMessage('Eliminación deshecha.', 'bg-success'); // Usando el color verde
+                lastDeletedRecord = null;
+                
+                // Ocultar la alerta de deshacer
+                const existingAlert = document.getElementById('temp-alert');
+                if (existingAlert) existingAlert.remove();
+            }
+        };
+
+        /**
+         * Muestra un mensaje temporal tipo snackbar.
+         */
+        const alertMessage = (message, bgColorClass, allowHtml = false) => {
+            const existingAlert = document.getElementById('temp-alert');
+            if (existingAlert) existingAlert.remove();
+
+            const alertDiv = document.createElement('div');
+            alertDiv.id = 'temp-alert';
+            alertDiv.className = `fixed bottom-4 left-1/2 transform -translate-x-1/2 px-6 py-3 ${bgColorClass} text-white rounded-lg shadow-xl transition-opacity duration-300 z-50`;
+            
+            if (allowHtml) {
+                alertDiv.innerHTML = message;
+            } else {
+                alertDiv.textContent = message;
+            }
+
+            document.body.appendChild(alertDiv);
+
+            // Aumentar el tiempo de espera a 10 segundos (10000ms) si no tiene la opción de Deshacer (es decir, si no tiene HTML)
+            if (!allowHtml) { 
+                const displayTime = 10000; // 10 segundos
+                setTimeout(() => {
+                    alertDiv.classList.add('opacity-0');
+                    setTimeout(() => alertDiv.remove(), 300);
+                }, displayTime);
+            }
+        };
+
+
+        /**
+         * Carga los registros de localStorage, aplicando el filtro si existe.
+         */
+        window.loadRecords = () => {
+            // Obtener el texto del filtro
+            const filterInput = document.getElementById('materialFilter');
+            const filterText = filterInput ? filterInput.value.toLowerCase().trim() : '';
+            
+            let records = getAllRecords();
+            
+            // Aplicar filtro si hay texto
+            if (filterText) {
+                records = records.filter(record => 
+                    record.material.toLowerCase().includes(filterText)
+                );
+            }
+
+            renderRecords(records);
+        };
+
+        /**
+         * Renderiza la lista de registros en la vista de reporte.
+         */
+        const renderRecords = (records) => {
+            const listEl = document.getElementById('recordList');
+            if (records.length === 0) {
+                listEl.innerHTML = '<p id="noRecords" class="text-gray-500 text-center py-8">No hay registros aún.</p>';
+                return;
+            }
+
+            listEl.innerHTML = records.map(record => {
+                const status = record.isSigned ? 'Validado' : 'Pendiente';
+                const statusColor = record.isSigned ? 'bg-success text-white' : 'bg-yellow-100 text-yellow-800';
+                
+                // Formatear fechas
+                const date = record.timestamp ? new Date(record.timestamp).toLocaleString('es-CL') : 'N/A';
+                
+                const validationBtn = record.isSigned
+                    ? `<button disabled class="bg-gray-400 text-white py-1 px-3 rounded-md text-xs opacity-70">Validado</button>`
+                    : `<button onclick="openModal('${record.id}')" class="bg-success hover:bg-success-dark text-white py-1 px-3 rounded-md text-xs transition duration-150">Firmar</button>`;
+
+                return `
+                    <div class="bg-white p-4 rounded-lg shadow-md flex justify-between items-center border-l-4 ${record.isSigned ? 'border-success' : 'border-primary'}">
+                        <div class="space-y-1">
+                            <p class="font-bold text-gray-800">${record.material} (${record.cantidad})</p>
+                            <p class="text-xs text-gray-500">Registrado: ${date}</p>
+                            <span class="inline-block py-1 px-3 text-xs font-medium rounded-full ${statusColor}">${status}</span>
+                        </div>
+                        <div class="flex flex-col space-y-2">
+                            <div class="flex space-x-2">
+                                <button onclick="openEditModal('${record.id}')" class="bg-yellow-500 hover:bg-yellow-600 text-white py-1 px-3 rounded-md text-xs transition duration-150">Editar</button>
+                                <button onclick="deleteRecord('${record.id}')" class="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-md text-xs transition duration-150">Eliminar</button>
+                            </div>
+                            ${validationBtn}
+                            <button onclick="exportPDF('${record.id}')" class="bg-primary hover:bg-primary-dark text-white py-1 px-3 rounded-md text-xs transition duration-150">PDF</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        };
+
+        // --- EXPORTACIÓN A CSV (EXCEL) ---
+
+        /**
+         * Exporta todos los registros a un archivo CSV usando punto y coma (;) como delimitador.
+         */
+        window.exportToExcel = () => {
+            const records = getAllRecords();
+            if (records.length === 0) {
+                alertMessage('No hay registros para exportar a Excel.', 'bg-yellow-500');
+                return;
+            }
+
+            alertMessage('Generando archivo Excel (CSV)...', 'bg-orange-600');
+            
+            // Define el delimitador como punto y coma
+            const DELIMITER = ';'; 
+
+            // 1. Definir encabezados (Headers)
+            // Se añade el BOM (\uFEFF) para asegurar que Excel lea correctamente los caracteres especiales (ñ, tildes)
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+            csvContent += `ID${DELIMITER}Material${DELIMITER}Cantidad${DELIMITER}Supervisor ID${DELIMITER}Fecha Registro${DELIMITER}Estado${DELIMITER}Validador${DELIMITER}Fecha Validación\n`;
+
+            // 2. Iterar sobre los registros y construir las filas
+            records.forEach(record => {
+                const isSigned = record.isSigned ? 'Validado' : 'Pendiente';
+                const fechaRegistro = record.timestamp ? new Date(record.timestamp).toLocaleString('es-CL') : 'N/A';
+                const fechaValidacion = record.validationTimestamp ? new Date(record.validationTimestamp).toLocaleString('es-CL') : 'N/A';
+                const validatorName = record.validatorName || 'N/A';
+
+                // Usamos comillas para envolver campos de texto y evitamos el DELIMITER en el texto
+                const row = [
+                    `"${record.id}"`,
+                    `"${record.material.replace(/"/g, '""')}"`, // Escapar comillas dobles
+                    record.cantidad,
+                    `"${record.supervisorId}"`,
+                    `"${fechaRegistro}"`,
+                    `"${isSigned}"`,
+                    `"${validatorName.replace(/"/g, '""')}"`,
+                    `"${fechaValidacion}"`
+                ];
+                // Unir los campos usando el DELIMITER (;)
+                csvContent += row.join(DELIMITER) + "\n";
+            });
+
+            // 3. Crear el enlace de descarga y simular el clic
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `Reporte_Produccion_Local_${new Date().toISOString().substring(0, 10)}.csv`);
+            document.body.appendChild(link); // Requerido para Firefox
+            link.click();
+            document.body.removeChild(link);
+            
+            alertMessage('Archivo CSV exportado exitosamente con delimitador ";".', 'bg-success');
+        };
+
+        // --- EXPORTACIÓN A PDF ---
+
+        /**
+         * Genera el contenido HTML para un registro individual, optimizado para no cortarse.
+         */
+        const generateSingleRecordHTML = (record, includeHeader = true) => {
+            const date = record.timestamp ? new Date(record.timestamp).toLocaleString('es-CL') : 'N/A';
+            const validationDate = record.validationTimestamp ? new Date(record.validationTimestamp).toLocaleString('es-CL') : 'Pendiente';
+            const editedDate = record.lastEdited ? `(Editado: ${new Date(record.lastEdited).toLocaleString('es-CL')})` : '';
+
+            // Usamos una estructura simple que cabe en A4
+            return `
+                <div class="p-4 border-4 border-primary">
+                    ${includeHeader ? `
+                        <div class="flex items-center space-x-3 mb-6 border-b pb-2">
+                            <!-- LOGO PARA PDF: w-full asegura que use el ancho disponible dentro del contenedor del PDF, max-h-12 limita la altura máxima -->
+                            <img src="https://agrozzi.cl/wp-content/uploads/2023/06/footer-19-06-1.png" alt="Logo de la Empresa" class="w-full max-w-full max-h-12 object-contain" style="height: auto;">
+                        </div>
+                    ` : ''}
+
+                    <div class="space-y-3 mb-6">
+                        <h2 class="text-xl font-bold text-gray-800">Detalles del Registro:</h2>
+                        <ul class="list-none space-y-1 text-sm">
+                            <li><strong>Material:</strong> ${record.material}</li>
+                            <li><strong>Cantidad Producida:</strong> ${record.cantidad}</li>
+                            <li><strong>Fecha Creación:</strong> ${date} ${editedDate}</li>
+                        </ul>
+                    </div>
+
+                    <!-- Bloque de Supervisor -->
+                    <div class="border p-3 rounded-lg mb-6 bg-gray-50" style="max-height: 250px;">
+                        <h2 class="text-lg font-bold mb-2 text-primary">Firma del Supervisor</h2>
+                        <p class="text-sm"><strong>Registrado por:</strong> ${record.supervisorId}</p>
+                        <img src="${record.supervisorSignature}" alt="Firma del Supervisor" style="max-width: 100%; height: auto; border: 1px solid #ccc; margin-top: 5px;">
+                    </div>
+
+                    <!-- Bloque de Validador -->
+                    <div class="border p-3 rounded-lg ${record.isSigned ? 'bg-success/10' : 'bg-red-50'}" style="max-height: 250px;">
+                        <h2 class="text-lg font-bold mb-2 ${record.isSigned ? 'text-success' : 'text-red-600'}">Validación</h2>
+                        ${record.isSigned ? `
+                            <p class="text-sm"><strong>Estado:</strong> Validado (${validationDate})</p>
+                            <p class="text-sm"><strong>Nombre del Validador:</strong> ${record.validatorName}</p>
+                            <img src="${record.validatorSignature}" alt="Firma del Validador" style="max-width: 100%; height: auto; border: 1px solid #ccc; margin-top: 5px;">
+                        ` : `
+                            <p class="text-red-600 font-medium text-sm">PENDIENTE DE VALIDACIÓN</p>
+                        `}
+                    </div>
+
+                    <p class="text-center text-xs mt-6 text-gray-500">Documento generado por el sistema de Validación.</p>
+                </div>
+            `;
+        };
+
+
+        /**
+         * Genera y exporta un registro INDIVIDUAL a un archivo PDF. (Optimizado para no cortar)
+         */
+        window.exportPDF = async (recordId) => {
+            const record = getRecordById(recordId);
+
+            if (!record) {
+                alertMessage('Error: Registro no encontrado para PDF.', 'bg-red-500');
+                return;
+            }
+
+            try {
+                // 1. Crear el contenido HTML limpio para el PDF
+                const pdfContentEl = document.getElementById('pdfContent');
+                // Usamos el mismo div oculto, pero solo el contenido del registro
+                pdfContentEl.innerHTML = generateSingleRecordHTML(record, true);
+                pdfContentEl.style.width = '595.28px'; // A4 width
+
+                alertMessage('Generando PDF individual, espere...', 'bg-primary');
+
+                // 2. Usar html2canvas para renderizar el contenido HTML a una imagen
+                const canvas = await html2canvas(pdfContentEl, { 
+                    scale: 2,
+                    useCORS: true // Necesario si las firmas son data:url
+                });
+                const imgData = canvas.toDataURL('image/png');
+
+                // 3. Usar jsPDF para crear el documento
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'px',
+                    format: 'a4' 
+                });
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const imgHeight = canvas.height * pdfWidth / canvas.width;
+                
+                // Como el contenido está diseñado para caber, lo agregamos directamente
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+
+                pdf.save(`Registro_Produccion_${record.material}_${record.id.substring(4, 9)}.pdf`);
+                alertMessage('PDF Exportado Correctamente.', 'bg-success');
+                pdfContentEl.innerHTML = ''; // Limpiar el contenido oculto
+            } catch (e) {
+                console.error("Error al exportar PDF individual:", e);
+                alertMessage('Fallo la exportación del PDF: ' + e.message, 'bg-red-500');
+            }
+        };
+
+        /**
+         * Genera y exporta TODOS los registros a un único archivo PDF de varias páginas.
+         */
+        window.exportAllPDF = async () => {
+            const allRecords = getAllRecords();
+            if (allRecords.length === 0) {
+                alertMessage('No hay registros para exportar.', 'bg-yellow-500');
+                return;
+            }
+
+            alertMessage(`Generando PDF de ${allRecords.length} registros (Multi-página)...`, 'bg-purple-600');
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'px',
+                format: 'a4' 
+            });
+
+            const pdfContentEl = document.getElementById('pdfContent');
+            pdfContentEl.innerHTML = ''; 
+            pdfContentEl.style.width = '595.28px'; // Ancho A4
+
+            // Primer página: Índice
+            const indexHtml = `
+                <div class="text-center p-4 mb-8">
+                    <div class="flex items-center justify-center space-x-3 mb-4">
+                        <!-- LOGO PARA PDF: w-full asegura que use el ancho disponible dentro del contenedor del PDF, max-h-12 limita la altura máxima -->
+                        <img src="https://agrozzi.cl/wp-content/uploads/2023/06/footer-19-06-1.png" alt="Logo de la Empresa" class="w-full max-w-full max-h-12 object-contain" style="height: auto;">
+                    </div>
+                    <p class="text-md text-gray-600">Total de Registros: ${allRecords.length}</p>
+                    <p class="text-sm text-gray-500">Generado el: ${new Date().toLocaleString('es-CL')}</p>
+                </div>
+                <h2 class="text-2xl font-bold mt-8 mb-4 text-primary">Índice de Registros:</h2>
+                <ul class="list-decimal list-inside space-y-1">
+                    ${allRecords.map((r, i) => `
+                        <li>${r.material} (${r.cantidad}): ${r.isSigned ? 'Validado' : 'Pendiente'}</li>
+                    `).join('')}
+                </ul>
+            `;
+            pdfContentEl.innerHTML = indexHtml;
+            
+            let canvas = await html2canvas(pdfContentEl, { scale: 2 });
+            let imgData = canvas.toDataURL('image/png');
+            let pdfWidth = pdf.internal.pageSize.getWidth();
+            let imgHeight = canvas.height * pdfWidth / canvas.width;
+            
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+
+            // Páginas subsiguientes: Un registro por página (para evitar cortes)
+            for (let i = 0; i < allRecords.length; i++) {
+                pdf.addPage(); // Agregar nueva página
+                const record = allRecords[i];
+
+                // Generar HTML del registro (sin el header principal)
+                const recordHtml = generateSingleRecordHTML(record, false);
+                
+                // Contenedor temporal para la página actual
+                pdfContentEl.innerHTML = `
+                    <div class="text-center pb-4 border-b">
+                        <h2 class="text-2xl font-bold text-gray-700">Registro ${i + 1} de ${allRecords.length}</h2>
+                    </div>
+                    ${recordHtml}
+                `;
+
+                // Renderizar a Canvas la página del registro
+                canvas = await html2canvas(pdfContentEl, { scale: 2, useCORS: true });
+                imgData = canvas.toDataURL('image/png');
+                imgHeight = canvas.height * pdfWidth / canvas.width;
+
+                // Agregar imagen a la página
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+            }
+
+            pdf.save(`Reporte_Masivo_Produccion_${new Date().toISOString().substring(0, 10)}.pdf`);
+            alertMessage('PDF Masivo Exportado Correctamente. (Multi-página sin cortes)', 'bg-success');
+            
+            // Limpiar
+            pdfContentEl.innerHTML = '';
+        };
+
+    </script>
+</body>
+</html>
