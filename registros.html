@@ -788,22 +788,19 @@
             // Define el delimitador como punto y coma
             const DELIMITER = ';'; 
 
-            // 1. Definir encabezados (Headers)
-            // Se añade el BOM (\uFEFF) para asegurar que Excel lea correctamente los caracteres especiales (ñ, tildes)
-            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+            let csvContent = "\uFEFF"; // BOM para caracteres especiales
             csvContent += `ID${DELIMITER}Material${DELIMITER}Cantidad${DELIMITER}Supervisor ID${DELIMITER}Fecha Registro${DELIMITER}Estado${DELIMITER}Validador${DELIMITER}Fecha Validación\n`;
 
-            // 2. Iterar sobre los registros y construir las filas
+            // ... (El resto de la construcción del CSV sigue igual) ...
             records.forEach(record => {
                 const isSigned = record.isSigned ? 'Validado' : 'Pendiente';
                 const fechaRegistro = record.timestamp ? new Date(record.timestamp).toLocaleString('es-CL') : 'N/A';
                 const fechaValidacion = record.validationTimestamp ? new Date(record.validationTimestamp).toLocaleString('es-CL') : 'N/A';
                 const validatorName = record.validatorName || 'N/A';
 
-                // Usamos comillas para envolver campos de texto y evitamos el DELIMITER en el texto
                 const row = [
                     `"${record.id}"`,
-                    `"${record.material.replace(/"/g, '""')}"`, // Escapar comillas dobles
+                    `"${record.material.replace(/"/g, '""')}"`, 
                     record.cantidad,
                     `"${record.supervisorId}"`,
                     `"${fechaRegistro}"`,
@@ -811,18 +808,22 @@
                     `"${validatorName.replace(/"/g, '""')}"`,
                     `"${fechaValidacion}"`
                 ];
-                // Unir los campos usando el DELIMITER (;)
                 csvContent += row.join(DELIMITER) + "\n";
             });
 
-            // 3. Crear el enlace de descarga y simular el clic
-            const encodedUri = encodeURI(csvContent);
+            // *** PARTE CRÍTICA PARA iOS/Safari: Usar Blob ***
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute("href", url);
             link.setAttribute("download", `Reporte_Produccion_Local_${new Date().toISOString().substring(0, 10)}.csv`);
-            document.body.appendChild(link); // Requerido para Firefox
+            
+            // Simular clic para iniciar la descarga
+            document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(url); // Liberar memoria
             
             alertMessage('Archivo CSV exportado exitosamente con delimitador ";".', 'bg-success');
         };
@@ -899,18 +900,16 @@
             }
 
             try {
-                // 1. Crear el contenido HTML limpio para el PDF
+                // ... (Pasos 1 y 2: Renderizado a Canvas e Imagen de datos) ...
                 const pdfContentEl = document.getElementById('pdfContent');
-                // Usamos el mismo div oculto, pero solo el contenido del registro
                 pdfContentEl.innerHTML = generateSingleRecordHTML(record, true);
-                pdfContentEl.style.width = '595.28px'; // Ancho A4
+                pdfContentEl.style.width = '595.28px'; 
 
                 alertMessage('Generando PDF individual, espere...', 'bg-primary');
 
-                // 2. Usar html2canvas para renderizar el contenido HTML a una imagen
                 const canvas = await html2canvas(pdfContentEl, { 
                     scale: 2,
-                    useCORS: true // Necesario si las firmas son data:url
+                    useCORS: true 
                 });
                 const imgData = canvas.toDataURL('image/png');
 
@@ -924,10 +923,21 @@
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const imgHeight = canvas.height * pdfWidth / canvas.width;
                 
-                // Como el contenido está diseñado para caber, lo agregamos directamente
                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
 
-                pdf.save(`Registro_Produccion_${record.material}_${record.id.substring(4, 9)}.pdf`);
+                // *** PARTE CRÍTICA PARA iOS/Safari: Output como Blob ***
+                const blob = pdf.output('blob');
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                
+                link.setAttribute("href", url);
+                link.setAttribute("download", `Registro_Produccion_${record.material}_${record.id.substring(4, 9)}.pdf`);
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
                 alertMessage('PDF Exportado Correctamente.', 'bg-success');
                 pdfContentEl.innerHTML = ''; // Limpiar el contenido oculto
             } catch (e) {
@@ -959,6 +969,8 @@
             pdfContentEl.innerHTML = ''; 
             pdfContentEl.style.width = '595.28px'; // Ancho A4
 
+            // (El resto del código de renderizado del índice y las páginas de registros sigue igual)
+
             // Primer página: Índice
             const indexHtml = `
                 <div class="text-center p-4 mb-8">
@@ -986,13 +998,10 @@
 
             // Páginas subsiguientes: Un registro por página (para evitar cortes)
             for (let i = 0; i < allRecords.length; i++) {
-                pdf.addPage(); // Agregar nueva página
+                pdf.addPage(); 
                 const record = allRecords[i];
-
-                // Generar HTML del registro (sin el header principal)
                 const recordHtml = generateSingleRecordHTML(record, false);
                 
-                // Contenedor temporal para la página actual
                 pdfContentEl.innerHTML = `
                     <div class="text-center pb-4 border-b">
                         <h2 class="text-2xl font-bold text-gray-700">Registro ${i + 1} de ${allRecords.length}</h2>
@@ -1000,19 +1009,27 @@
                     ${recordHtml}
                 `;
 
-                // Renderizar a Canvas la página del registro
                 canvas = await html2canvas(pdfContentEl, { scale: 2, useCORS: true });
                 imgData = canvas.toDataURL('image/png');
                 imgHeight = canvas.height * pdfWidth / canvas.width;
-
-                // Agregar imagen a la página
                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
             }
 
-            pdf.save(`Reporte_Masivo_Produccion_${new Date().toISOString().substring(0, 10)}.pdf`);
+            // *** PARTE CRÍTICA PARA iOS/Safari: Output como Blob ***
+            const blob = pdf.output('blob');
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Reporte_Masivo_Produccion_${new Date().toISOString().substring(0, 10)}.pdf`);
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
             alertMessage('PDF Masivo Exportado Correctamente. (Multi-página sin cortes)', 'bg-success');
             
-            // Limpiar
             pdfContentEl.innerHTML = '';
         };
 
