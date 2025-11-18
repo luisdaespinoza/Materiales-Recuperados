@@ -183,7 +183,7 @@
         let signaturePadSupervisor, signaturePadValidator;
         let selectedRecordId = null;
         let lastDeletedRecord = null; // Para la función de Deshacer eliminación
-        let currentImageBase64 = null; // Variable para almacenar la imagen en Base64
+        let currentImageBase64 = null; // Variable para almacenar la imagen en Base64 (COMPRIMIDA)
 
         // Clave de almacenamiento local
         const LOCAL_STORAGE_KEY = 'productionRecords';
@@ -226,43 +226,111 @@
             changeView('newRecord');
         };
 
-        // --- MANEJO DE IMÁGENES (NUEVAS FUNCIONES) ---
+        // --- MANEJO DE IMÁGENES (MODIFICADO para COMPRESIÓN) ---
 
         /**
-         * Muestra una vista previa de la imagen seleccionada y la prepara para Base64.
+         * Comprime y convierte el archivo de imagen a Base64 con un tamaño máximo.
+         * ESTA FUNCIÓN SOLUCIONA EL ERROR DE CUOTA LLENA (QuotaExceededError).
+         * @param {File} file - El archivo de imagen.
+         * @returns {Promise<string>} La cadena Base64 comprimida.
          */
-        window.previewImage = (event) => {
+        const compressAndConvertImage = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (readerEvent) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const MAX_WIDTH = 800; // Máximo ancho en píxeles (suficiente para evidencia)
+                        const MAX_HEIGHT = 800; // Máxima altura en píxeles
+                        const MIME_TYPE = "image/jpeg";
+                        const QUALITY = 0.7; // Calidad de compresión JPEG (0.0 a 1.0)
+                        
+                        let width = img.width;
+                        let height = img.height;
+
+                        // Redimensionar si es necesario
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height *= MAX_WIDTH / width;
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width *= MAX_HEIGHT / height;
+                                height = MAX_HEIGHT;
+                            }
+                        }
+                        
+                        // Crear un canvas oculto para el procesamiento
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+
+                        const ctx = canvas.getContext('2d');
+                        // Dibujar la imagen redimensionada
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        // Exportar a Base64 con compresión JPEG
+                        const dataUrl = canvas.toDataURL(MIME_TYPE, QUALITY);
+                        resolve(dataUrl);
+                    };
+                    img.onerror = reject;
+                    img.src = readerEvent.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        };
+
+
+        /**
+         * Muestra una vista previa de la imagen seleccionada y la prepara (comprimida) para Base64.
+         */
+        window.previewImage = async (event) => {
             const file = event.target.files[0];
             const previewEl = document.getElementById('image-preview');
             const previewContainer = document.getElementById('image-preview-container');
 
             if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    previewEl.src = e.target.result;
-                    previewContainer.classList.remove('hidden');
-                    // Almacenar la Base64 globalmente para `saveRecord`
-                    currentImageBase64 = e.target.result; 
-                };
-                reader.readAsDataURL(file);
+                if (!file.type.startsWith('image/')) {
+                    alertMessage('Por favor, seleccione un archivo de imagen válido.', 'bg-red-500');
+                    event.target.value = '';
+                    previewEl.src = '';
+                    previewContainer.classList.add('hidden');
+                    currentImageBase64 = null;
+                    return;
+                }
+
+                try {
+                    // Muestra la vista previa inmediatamente (aunque sea la versión sin comprimir)
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewEl.src = e.target.result;
+                        previewContainer.classList.remove('hidden');
+                    };
+                    reader.readAsDataURL(file);
+                    
+                    // COMPRIMIR LA IMAGEN EN SEGUNDO PLANO
+                    const compressedBase64 = await compressAndConvertImage(file);
+                    
+                    // Actualizar el Base64 global con la versión comprimida
+                    currentImageBase64 = compressedBase64; 
+                    alertMessage('Imagen cargada y comprimida (800px) para guardar.', 'bg-gray-700', false);
+
+                } catch (error) {
+                    console.error("Error al comprimir la imagen:", error);
+                    alertMessage('Error al procesar la imagen.', 'bg-red-500');
+                    event.target.value = '';
+                    previewEl.src = '';
+                    previewContainer.classList.add('hidden');
+                    currentImageBase64 = null;
+                }
+
             } else {
                 previewEl.src = '';
                 previewContainer.classList.add('hidden');
                 currentImageBase64 = null;
             }
-        };
-
-        /**
-         * Convierte un objeto File a Base64 usando una promesa.
-         * (Se mantiene para la función 'saveRecord' original, aunque ahora se usa 'currentImageBase64')
-         */
-        const imageToBase64 = (file) => {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = error => reject(error);
-                reader.readAsDataURL(file);
-            });
         };
 
         // --- GESTIÓN DE REGISTROS ---
@@ -283,7 +351,7 @@
          * @param {Array<Object>} records - Lista de registros a guardar.
          */
         const saveAllRecords = (records) => {
-            // No ordenar aquí, ya se hace al obtenerlos si es necesario para el UI
+            // Se puede envolver en un try-catch más específico para QuotaExceededError si se desea
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(records));
         };
 
@@ -417,7 +485,7 @@
         /**
          * Guarda un nuevo registro de producción en localStorage.
          */
-        window.saveRecord = async () => { // Se convierte a async para usar await en la Base64, aunque ahora usa la variable global
+        window.saveRecord = () => { // Ya no es async, ya que la imagen se procesó en previewImage
             const material = document.getElementById('material').value.trim();
             const cantidad = parseInt(document.getElementById('cantidad').value, 10);
             const messageEl = document.getElementById('newRecordMessage');
@@ -445,7 +513,7 @@
                     id: newRecordId,
                     material: material,
                     cantidad: cantidad,
-                    fotoEvidencia: fotoEvidencia, // NUEVO: Campo para la foto
+                    fotoEvidencia: fotoEvidencia, // Campo para la foto (ahora comprimida)
                     supervisorSignature: supervisorSignature,
                     supervisorId: currentUserId,
                     timestamp: new Date().toISOString(),
@@ -457,7 +525,7 @@
                 
                 // Usar unshift para que el nuevo aparezca primero en el array
                 records.unshift(newRecord); 
-                saveAllRecords(records);
+                saveAllRecords(records); // Aquí podría fallar si el límite aún se excede (ej. muchas imágenes)
 
                 document.getElementById('material').value = '';
                 document.getElementById('cantidad').value = '';
@@ -482,7 +550,13 @@
 
             } catch (e) {
                 console.error("Error al guardar el registro en localStorage:", e);
-                messageEl.textContent = 'Error al guardar localmente.';
+                // MEJORAR EL MENSAJE DE ERROR
+                if (e.name === 'QuotaExceededError') {
+                    messageEl.textContent = 'Error: No queda espacio de almacenamiento local. Intente borrar registros antiguos o use una imagen más pequeña.';
+                } else {
+                    messageEl.textContent = 'Error al guardar localmente. Consulte la consola para más detalles.';
+                }
+                
                 messageEl.classList.remove('text-success');
                 messageEl.classList.add('text-red-500');
                 messageEl.style.color = ''; // Eliminar estilo si hay error
