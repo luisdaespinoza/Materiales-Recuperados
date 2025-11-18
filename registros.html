@@ -226,7 +226,7 @@
             changeView('newRecord');
         };
 
-        // --- MANEJO DE IMÁGENES (MODIFICADO para COMPRESIÓN) ---
+        // --- MANEJO DE IMÁGENES (CON COMPRESIÓN) ---
 
         /**
          * Comprime y convierte el archivo de imagen a Base64 con un tamaño máximo.
@@ -240,7 +240,7 @@
                 reader.onload = (readerEvent) => {
                     const img = new Image();
                     img.onload = () => {
-                        const MAX_WIDTH = 800; // Máximo ancho en píxeles (suficiente para evidencia)
+                        const MAX_WIDTH = 800; // Máximo ancho en píxeles (tamaño aceptable para evidencia)
                         const MAX_HEIGHT = 800; // Máxima altura en píxeles
                         const MIME_TYPE = "image/jpeg";
                         const QUALITY = 0.7; // Calidad de compresión JPEG (0.0 a 1.0)
@@ -248,7 +248,7 @@
                         let width = img.width;
                         let height = img.height;
 
-                        // Redimensionar si es necesario
+                        // Redimensionar si es necesario, manteniendo la proporción
                         if (width > height) {
                             if (width > MAX_WIDTH) {
                                 height *= MAX_WIDTH / width;
@@ -302,7 +302,7 @@
                 }
 
                 try {
-                    // Muestra la vista previa inmediatamente (aunque sea la versión sin comprimir)
+                    // Muestra la vista previa inmediatamente (usando la versión original)
                     const reader = new FileReader();
                     reader.onload = function(e) {
                         previewEl.src = e.target.result;
@@ -310,12 +310,12 @@
                     };
                     reader.readAsDataURL(file);
                     
-                    // COMPRIMIR LA IMAGEN EN SEGUNDO PLANO
+                    // COMPRIMIR Y REDIMENSIONAR LA IMAGEN en segundo plano
                     const compressedBase64 = await compressAndConvertImage(file);
                     
-                    // Actualizar el Base64 global con la versión comprimida
+                    // Almacenar el Base64 globalmente (COMPRIMIDO) para `saveRecord`
                     currentImageBase64 = compressedBase64; 
-                    alertMessage('Imagen cargada y comprimida (800px) para guardar.', 'bg-gray-700', false);
+                    alertMessage('Imagen cargada y comprimida (800px) lista para guardar.', 'bg-gray-700', false);
 
                 } catch (error) {
                     console.error("Error al comprimir la imagen:", error);
@@ -501,7 +501,7 @@
                 return;
             }
             
-            // La Base64 de la foto ya debe estar en currentImageBase64 si se cargó una
+            // La Base64 de la foto ya debe estar en currentImageBase64 si se cargó una y comprimida.
             const fotoEvidencia = currentImageBase64; 
             const supervisorSignature = signaturePadSupervisor.toDataURL();
             
@@ -903,7 +903,7 @@
                 const pdfContentEl = document.getElementById('pdfContent');
                 // Usamos el mismo div oculto, pero solo el contenido del registro
                 pdfContentEl.innerHTML = generateSingleRecordHTML(record, true);
-                pdfContentEl.style.width = '595.28px'; // A4 width
+                pdfContentEl.style.width = '595.28px'; // Ancho A4
 
                 alertMessage('Generando PDF individual, espere...', 'bg-primary');
 
