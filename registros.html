@@ -79,7 +79,8 @@
                     <input type="number" id="cantidad" placeholder="Cantidad Producida" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2" required>
                     
                     <label class="block text-gray-700 font-medium mb-1 pt-2 border-t border-gray-200">Foto de Evidencia (Opcional):</label>
-                    <input type="file" id="fotoEvidencia" accept="image/*" capture="environment" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2" onchange="previewImage(event)">
+                    <!-- SE ELIMINÓ capture="environment" para permitir la GALERÍA y CÁMARA -->
+                    <input type="file" id="fotoEvidencia" accept="image/*" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary focus:ring-2" onchange="previewImage(event)">
 
                     <div id="image-preview-container" class="mt-2 hidden">
                         <p class="text-sm text-gray-500 mb-1">Vista Previa:</p>
@@ -791,7 +792,6 @@
             let csvContent = "\uFEFF"; // BOM para caracteres especiales
             csvContent += `ID${DELIMITER}Material${DELIMITER}Cantidad${DELIMITER}Supervisor ID${DELIMITER}Fecha Registro${DELIMITER}Estado${DELIMITER}Validador${DELIMITER}Fecha Validación\n`;
 
-            // ... (El resto de la construcción del CSV sigue igual) ...
             records.forEach(record => {
                 const isSigned = record.isSigned ? 'Validado' : 'Pendiente';
                 const fechaRegistro = record.timestamp ? new Date(record.timestamp).toLocaleString('es-CL') : 'N/A';
@@ -968,8 +968,6 @@
             const pdfContentEl = document.getElementById('pdfContent');
             pdfContentEl.innerHTML = ''; 
             pdfContentEl.style.width = '595.28px'; // Ancho A4
-
-            // (El resto del código de renderizado del índice y las páginas de registros sigue igual)
 
             // Primer página: Índice
             const indexHtml = `
